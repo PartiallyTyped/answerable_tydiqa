@@ -62,7 +62,7 @@ class TydiqaBuilderConfig(datasets.BuilderConfig):
         self.monolingual = monolingual
 
 
-VERSION = datasets.Version("1.1.2")
+VERSION = datasets.Version("1.1.3")
 RAW="raw"
 PREPROCESSED="preprocessed"
 PREPROC_FOR_CLASSIFICATION = "preprocessed for classification"
@@ -184,8 +184,10 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
             check_language = lambda x: True
         elif monolingual or split=="train":
             check_language = language.__eq__
-        else:
-            check_language = lambda x: x != language
+        elif not monolingual and split=="validation":
+            s = {"finnish", "english", "japanese"}
+            s.remove(language)
+            check_language = s.__contains__
 
         with open(filepath, encoding="utf-8") as f:
             for key, row in enumerate(f):
