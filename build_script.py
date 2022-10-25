@@ -8,11 +8,12 @@ from spacy.lang.ja import Japanese
 
 from toolz import curry, compose
 import re
-from gensim.parsing.preprocessing import strip_multiple_whitespaces, strip_tags, strip_punctuation
+from gensim.parsing.preprocessing import strip_multiple_whitespaces, strip_tags, strip_punctuation, strip_non_alphanum
 from collections import defaultdict
 from xxhash import xxh64_hexdigest
 import pathlib as pl
 import nltk
+from itertools import compress
 
 strip_references = curry(re.sub)(r"\[\d+\]", "")
 strip_quotes = curry(re.sub)(r"['\"]", "")
@@ -32,6 +33,7 @@ punc = "！？｡。＂＃＄％＆＇（）＊＋，－／：；＜＝＞＠［
 preprocess_fn2 = compose(strip_multiple_whitespaces,strip_tags,str.lower, lambda x: re.sub(r"[%s]+" % punc, "", x))
 preprocess_all = compose(
     strip_multiple_whitespaces,
+    strip_non_alphanum,
     str.strip,
     strip_punctuation,
     preprocess_fn,
@@ -162,6 +164,7 @@ def build_tokenized():
             "id": example["id"],
             "golds": golds,
         }
+
     ds = D.load_dataset("PartiallyTyped/answerable_tydiqa", "preprocessed")
     ds = ds.map(tokenize)
 
