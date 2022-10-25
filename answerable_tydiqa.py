@@ -156,6 +156,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         # By default the archives will be extracted and a path to a cached folder where they are extracted is returned instead of the archive
         name = {
             PREPROCESSED: PREPROCESSED,
+            TOKENIZED: TOKENIZED,
         }[self.config.name]
         url = "https://raw.githubusercontent.com/PartiallyTyped/answerable_tydiqa/data/{split}/{name}.json"
         urls = {
