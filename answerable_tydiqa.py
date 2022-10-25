@@ -157,8 +157,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
             PREPROC_FOR_CLASSIFICATION: "preprocessed_for_classification",
             TOKENIZED_FOR_CLASSIFICATION: "tokenized_for_classification"
         }[self.config.name]
-        
-        url = "https://raw.githubusercontent.com/PartiallyTyped/answerable_tydiqa/main/{split}/{name}.json"
+        url = "https://raw.githubusercontent.com/PartiallyTyped/answerable_tydiqa/data/{split}/{name}.json"
         urls = {
             "train": url.format(split="train", name=name),
             "validation": url.format(split="validation", name=name),
