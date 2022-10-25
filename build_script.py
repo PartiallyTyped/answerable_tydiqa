@@ -159,7 +159,7 @@ def build_tokenized():
             "question": q_tokens,
             "language": language,
             "id": example["id"],
-            "golds": golds["answer_text"],
+            "golds": golds,
         }
     ds = D.load_dataset("PartiallyTyped/answerable_tydiqa", "preprocessed")
     ds = ds.map(tokenize)

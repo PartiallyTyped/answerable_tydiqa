@@ -229,5 +229,6 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
                         "golds": data["golds"],
                         "language": language,
                     }
+                else:
                     raise ValueError("Unknown config name")
 
