@@ -77,14 +77,14 @@ def build_preprocessed():
                     out["context"].append(sent)
                     out["question"].append(question)
                     out["language"].append(language)
-                    out["golds"].append({"answer_text": answer, "answer_start": sent.index(answer)})
+                    out["golds"].append({"answer_text": [answer], "answer_start": [sent.index(answer)]})
                     break
             else:
                 out["id"].append(seq_id)
                 out["context"].append(sent)
                 out["question"].append(question)
                 out["language"].append(language)
-                out["golds"].append({"answer_text": "", "answer_start": -1})
+                out["golds"].append({"answer_text": [""], "answer_start": [-1]})
 
         return out
 
