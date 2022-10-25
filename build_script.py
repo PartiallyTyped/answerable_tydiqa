@@ -39,7 +39,7 @@ preprocess_all = compose(
     curry(re.sub, r"[%s]+" % punc, ""),
 )
 
-MODE = flags.DEFINE_enum("mode", "preprocessed", ["preprocessed", "tokenized"], "Which data to build")
+MODE = flags.DEFINE_enum("mode", None, ["preprocessed", "tokenized", "bpemb"], "Which data to build")
 
 def build_preprocessed():
     processors = {
@@ -169,12 +169,50 @@ def build_tokenized():
         path.parent.mkdir(parents=True, exist_ok=True)
         value.to_json(path)
 
+def build_bpemb():
+    from bpemb import BPEmb
+    tokenized = D.load_dataset("PartiallyTyped/answerable_tydiqa", "tokenized")
+    encoders = {
+        "english": BPEmb(lang="en", vs=100000, dim=300),
+        "finnish": BPEmb(lang="fi", vs=100000, dim=300),
+        "japanese": BPEmb(lang="ja", vs=100000, dim=300),
+    }
+    def encode(example):
+        context = example["context"]
+        question = example["question"]
+        language = example["language"]
+        golds = example["golds"]
+        encoder = encoders[language]
+        ctx = encoder.encode_ids(context)
+        q = encoder.encode_ids(question)
+        iob_labels = example["iob_label"]
+        iob_labels = [[l]*len(t) for l, t in zip(iob_labels, ctx)]
+        iob_labels = sum(iob_labels, [])
+        context = sum(ctx, [])
+        question = sum(q, [])
+
+        return {
+            "iob_label": iob_labels,
+            "context": context,
+            "question": question,
+            "language": language,
+            "id": example["id"],
+            "golds": golds,
+        }
+    ds = tokenized.map(encode)
+    for key, value in ds.items():
+        path = pl.Path(f"{key}/bpemb.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        value.to_json(path)
+    
+
 def main(_):
     if MODE.value == "preprocessed":
         build_preprocessed()
     elif MODE.value == "tokenized":
         build_tokenized()
-
+    elif MODE.value == "bpemb":
+        build_bpemb()
     else:
         raise ValueError("Not implemented yet")
     
