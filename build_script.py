@@ -7,10 +7,11 @@ from spacy.lang.ja import Japanese
 
 from toolz import curry, compose
 import re
-from gensim.parsing.preprocessing import strip_multiple_whitespaces, strip_tags
+from gensim.parsing.preprocessing import strip_multiple_whitespaces, strip_tags, strip_punctuation
 from collections import defaultdict
 from xxhash import xxh64_hexdigest
 import pathlib as pl
+import nltk
 
 strip_references = curry(re.sub)(r"\[\d+\]", "")
 strip_quotes = curry(re.sub)(r"['\"]", "")
@@ -24,6 +25,16 @@ preprocess_fn = compose(
     strip_quotes,
     strip_double_quotes,
     strip_ellipsis,
+)
+
+punc = "！？｡。＂＃＄％＆＇（）＊＋，－／：；＜＝＞＠［＼］＾＿｀｛｜｝～｟｠｢｣､、〃》「」『』【】〔〕〖〗〘〙〚〛〜〝〞〟〰〾〿–—‘’‛“”„‟…‧﹏."
+preprocess_fn2 = compose(strip_multiple_whitespaces,strip_tags,str.lower, lambda x: re.sub(r"[%s]+" % punc, "", x))
+preprocess_all = compose(
+    preprocess_fn,
+    strip_multiple_whitespaces,
+    strip_tags,
+    str.lower,
+    curry(re.sub, r"[%s]+" % punc, ""),
 )
 
 MODE = flags.DEFINE_enum("mode", "preprocessed", ["preprocessed", "for_classification"], "Which data to build")
@@ -49,7 +60,13 @@ def build_preprocessed():
         
         nlp = processors[language]
         answers = list(map(str, nlp(answer).sents))
+        answers = [preprocess_all(a) for a in answers]
+
         sentences = list(map(str, nlp(context).sents))
+        sentences = [preprocess_all(s) for s in sentences]
+
+        question = preprocess_all(question)
+        
         passes_test = True
         if bool(answer):
             passes_test = any(answer in sent for sent in sentences for answer in answers)
@@ -89,14 +106,16 @@ def build_preprocessed():
         return out
 
 
-
+    
     out = (
         raw.map(transform, batched=True, batch_size=1, remove_columns=["document_plaintext", "question_text", "annotations", "language", "document_title", "document_url"])
         .filter(bool, input_columns="passes_test")
-        .map(distribute, batched=True, batch_size=1, remove_columns=["context", "question", "language", "answers", "passes_test"])
     )
-
-    for key, value in out.items():
+    print(raw)
+    print(out)
+    distributed = out.map(distribute, batched=True, batch_size=1, remove_columns=["context", "question", "language", "answers", "passes_test"])
+    print(distributed)
+    for key, value in distributed.items():
         path = pl.Path(f"{key}/preprocessed.json")
         path.parent.mkdir(parents=True, exist_ok=True)
         value.to_json(path)

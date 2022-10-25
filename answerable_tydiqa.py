@@ -62,8 +62,7 @@ class TydiqaBuilderConfig(datasets.BuilderConfig):
         self.monolingual = monolingual
 
 
-VERSION = datasets.Version("1.1.3")
-RAW="raw"
+VERSION = datasets.Version("1.1.4")
 PREPROCESSED="preprocessed"
 PREPROC_FOR_CLASSIFICATION = "preprocessed for classification"
 TOKENIZED_FOR_CLASSIFICATION = "tokenized for classification"
@@ -94,7 +93,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         TydiqaBuilderConfig(name="preprocessed", version=VERSION),
     ]
 
-    DEFAULT_CONFIG_NAME = RAW # It's not mandatory to have a default configuration. Just use one if it make sense.
+    DEFAULT_CONFIG_NAME = PREPROCESSED # It's not mandatory to have a default configuration. Just use one if it make sense.
 
     def _info(self):
         if self.config.name == PREPROCESSED:
@@ -140,10 +139,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         # It can accept any type or nested list/dict and will give back the same structure with the url replaced with path to local files.
         # By default the archives will be extracted and a path to a cached folder where they are extracted is returned instead of the archive
         name = {
-            RAW: RAW,
             PREPROCESSED: PREPROCESSED,
-            PREPROC_FOR_CLASSIFICATION: "preprocessed_for_classification",
-            TOKENIZED_FOR_CLASSIFICATION: "tokenized_for_classification"
         }[self.config.name]
         url = "https://raw.githubusercontent.com/PartiallyTyped/answerable_tydiqa/data/{split}/{name}.json"
         urls = {
