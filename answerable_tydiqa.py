@@ -65,7 +65,7 @@ class TydiqaBuilderConfig(datasets.BuilderConfig):
         self.task = task
 
 
-VERSION = datasets.Version("1.1.0a")
+VERSION = datasets.Version("1.1.1")
 RAW="raw"
 PREPROCESSED="preprocessed"
 PREPROC_FOR_CLASSIFICATION = "preprocessed for classification"
