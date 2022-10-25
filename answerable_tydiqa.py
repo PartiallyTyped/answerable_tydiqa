@@ -65,6 +65,7 @@ class TydiqaBuilderConfig(datasets.BuilderConfig):
 VERSION = datasets.Version("1.1.5")
 PREPROCESSED="preprocessed"
 TOKENIZED = "tokenized"
+BPEMB = "bpemb"
 class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
     """TODO: Short description of my dataset."""
 
@@ -90,6 +91,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         # TydiqaBuilderConfig(name="raw", version=VERSION),
         TydiqaBuilderConfig(name=PREPROCESSED, version=VERSION),
         TydiqaBuilderConfig(name=TOKENIZED, version=VERSION),
+        TydiqaBuilderConfig(name=BPEMB, version=VERSION),
     ]
 
     DEFAULT_CONFIG_NAME = PREPROCESSED # It's not mandatory to have a default configuration. Just use one if it make sense.
@@ -128,6 +130,21 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
                     ),
                 }
             )
+        elif self.config.name == BPEMB:
+            features = datasets.Features({
+                "iob_label": datasets.features.Sequence(datasets.Value("int32")),
+                "cls_label": datasets.Value("bool"),
+                "context": datasets.features.Sequence(datasets.Value("int32")),
+                "question": datasets.features.Sequence(datasets.Value("int32")),
+                "language": datasets.Value("string"),
+                "id": datasets.Value("string"),
+                "golds": datasets.features.Sequence(
+                        {
+                            "answer_text": datasets.Value("string"),
+                            "answer_start": datasets.Value("int32"),
+                        }
+                    ),
+                })
         else:
             raise ValueError("Unknown config name")
         
@@ -157,6 +174,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         name = {
             PREPROCESSED: PREPROCESSED,
             TOKENIZED: TOKENIZED,
+            BPEMB: BPEMB,
         }[self.config.name]
         url = "https://raw.githubusercontent.com/PartiallyTyped/answerable_tydiqa/data/{split}/{name}.json"
         urls = {
@@ -219,7 +237,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
                         "language": language,
                         "label": any(s!=-1 for s in data["golds"]["answer_start"]),
                     }
-                elif self.config.name == TOKENIZED:
+                elif self.config.name in (TOKENIZED, BPEMB):
                     yield key, {
                         "id": data["id"],
                         "iob_label": data["iob_label"],
