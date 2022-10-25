@@ -43,12 +43,10 @@ MODE = flags.DEFINE_enum("mode", None, ["preprocessed", "tokenized", "bpemb"], "
 
 def build_preprocessed():
     processors = {
-        "english": English(),
-        "finnish": Finnish(),
-        "japanese": Japanese(),
+        "english": spacy.load("en_core_web_lg"),
+        "finnish": spacy.load("fi_core_news_lg"),
+        "japanese": spacy.load("ja_core_news_lg"),
     }
-    for v in processors.values():
-        v.add_pipe("sentencizer")
 
     raw = D.load_dataset("copenlu/answerable_tydiqa").filter(processors.__contains__, input_columns="language")
 
@@ -150,9 +148,13 @@ def build_tokenized():
         answer_end = answer_start + len(golds["answer_text"][0])
         iob = [0] * len(tokens)
         for i, (start, end) in enumerate(zip(token_starts, token_ends)):
-            if start >= answer_start and  end <= answer_end:
+            if start >= answer_start and end <= answer_end:
                 iob[i] = 1
         
+        test = True
+        if bool(golds["answer_text"][0]):
+            test = any(iob)
+
         return {
             "iob_label": iob,
             "context": tokens,
@@ -160,9 +162,11 @@ def build_tokenized():
             "language": language,
             "id": example["id"],
             "golds": golds,
+            "passes_test": test
         }
     ds = D.load_dataset("PartiallyTyped/answerable_tydiqa", "preprocessed")
     ds = ds.map(tokenize)
+    ds = ds.filter(bool, input_columns="passes_test").remove_columns(["passes_test"])
 
     for key, value in ds.items():
         path = pl.Path(f"{key}/tokenized.json")
