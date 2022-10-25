@@ -1,4 +1,5 @@
 import datasets as D
+from joblib import cpu_count
 import spacy
 from absl import flags, app
 from spacy.lang.en import English
@@ -38,7 +39,7 @@ preprocess_all = compose(
     curry(re.sub, r"[%s]+" % punc, ""),
 )
 
-MODE = flags.DEFINE_enum("mode", "preprocessed", ["preprocessed", "for_classification"], "Which data to build")
+MODE = flags.DEFINE_enum("mode", "preprocessed", ["preprocessed", "tokenized"], "Which data to build")
 
 def build_preprocessed():
     processors = {
@@ -124,12 +125,57 @@ def build_preprocessed():
     return out
 
 
+def build_tokenized():
+    # use spacy large models
+    tokenizers = {
+        "english": spacy.load("en_core_web_lg"),
+        "finnish": spacy.load("fi_core_news_lg"),
+        "japanese": spacy.load("ja_core_news_lg"),
+    }
+    def tokenize(example):
+        context = example["context"]
+        question = example["question"]
+        language = example["language"]
+        golds = example["golds"]
+        nlp = tokenizers[language]
+        ctx = nlp(context)
+        tokens = [t.text for t in ctx]
+        token_starts = [t.idx for t in ctx]
+        token_ends = [t.idx + len(t.text) for t in ctx]
 
+        q = nlp(question)
+        q_tokens = [t.text for t in q]
+
+        answer_start = golds["answer_start"][0]
+        answer_end = answer_start + len(golds["answer_text"][0])
+        iob = [0] * len(tokens)
+        for i, (start, end) in enumerate(zip(token_starts, token_ends)):
+            if start >= answer_start and  end <= answer_end:
+                iob[i] = 1
+        
+        return {
+            "iob_label": iob,
+            "context": tokens,
+            "question": q_tokens,
+            "language": language,
+            "id": example["id"],
+            "golds": golds["answer_text"],
+        }
+    ds = D.load_dataset("PartiallyTyped/answerable_tydiqa", "preprocessed")
+    ds = ds.map(tokenize)
+
+    for key, value in ds.items():
+        path = pl.Path(f"{key}/tokenized.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        value.to_json(path)
 
 def main(_):
     if MODE.value == "preprocessed":
         build_preprocessed()
-    elif MODE.value == "for_classification":
+    elif MODE.value == "tokenized":
+        build_tokenized()
+
+    else:
         raise ValueError("Not implemented yet")
     
 

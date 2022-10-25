@@ -64,9 +64,7 @@ class TydiqaBuilderConfig(datasets.BuilderConfig):
 
 VERSION = datasets.Version("1.1.5")
 PREPROCESSED="preprocessed"
-PREPROC_FOR_CLASSIFICATION = "preprocessed for classification"
-TOKENIZED_FOR_CLASSIFICATION = "tokenized for classification"
-
+TOKENIZED = "tokenized"
 class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
     """TODO: Short description of my dataset."""
 
@@ -90,7 +88,8 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
     # ]
     BUILDER_CONFIGS = [
         # TydiqaBuilderConfig(name="raw", version=VERSION),
-        TydiqaBuilderConfig(name="preprocessed", version=VERSION),
+        TydiqaBuilderConfig(name=PREPROCESSED, version=VERSION),
+        TydiqaBuilderConfig(name=TOKENIZED, version=VERSION),
     ]
 
     DEFAULT_CONFIG_NAME = PREPROCESSED # It's not mandatory to have a default configuration. Just use one if it make sense.
@@ -110,6 +109,23 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
                         }
                     ),
                     "label": datasets.Value("bool"),
+                }
+            )
+        elif self.config.name == TOKENIZED:
+            features = datasets.Features(
+                {
+                    "id": datasets.Value("string"),
+                    "iob_label": datasets.features.Sequence(datasets.Value("int32")),
+                    "cls_label": datasets.Value("bool"),
+                    "context": datasets.features.Sequence(datasets.Value("string")),
+                    "question": datasets.features.Sequence(datasets.Value("string")),
+                    "language": datasets.Value("string"),
+                    "golds": datasets.features.Sequence(
+                        {
+                            "answer_text": datasets.Value("string"),
+                            "answer_start": datasets.Value("int32"),
+                        }
+                    ),
                 }
             )
         else:
@@ -202,6 +218,15 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
                         "language": language,
                         "label": any(s!=-1 for s in data["golds"]["answer_start"]),
                     }
-                else:
+                elif self.config.name == TOKENIZED:
+                    yield key, {
+                        "id": data["id"],
+                        "iob_label": data["iob_label"],
+                        "cls_label": any(data["iob_label"]),
+                        "context": data["context"],
+                        "question": data["question"],
+                        "golds": data["golds"],
+                        "language": language,
+                    }
                     raise ValueError("Unknown config name")
 
