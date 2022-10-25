@@ -18,6 +18,7 @@
 import csv
 import json
 import os
+from typing import Literal
 
 import datasets
 
@@ -53,12 +54,15 @@ class TydiqaBuilderConfig(datasets.BuilderConfig):
     """BuilderConfig for AnswerableTydiqa"""
     language:str = "english"
     monolingual:bool = True
+    task:Literal["cls", "qa"]= "none"
     def __init__(self, **kwargs):
         language = kwargs.pop("language", "all")
         monolingual = kwargs.pop("monolingual", True)
+        task = kwargs.pop("task", "qa")
         super().__init__(**kwargs)
         self.language = language
         self.monolingual = monolingual
+        self.task = task
 
 
 VERSION = datasets.Version("1.1.0")
@@ -89,14 +93,14 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         # for name in [RAW, PREPROCESSED, PREPROC_FOR_CLASSIFICATION, TOKENIZED_FOR_CLASSIFICATION]
     # ]
     BUILDER_CONFIGS = [
-        TydiqaBuilderConfig(name="raw", version=VERSION),
-        # TydiqaBuilderConfig(name="preprocessed", version=VERSION),
+        # TydiqaBuilderConfig(name="raw", version=VERSION),
+        TydiqaBuilderConfig(name="preprocessed", version=VERSION),
     ]
 
     DEFAULT_CONFIG_NAME = RAW # It's not mandatory to have a default configuration. Just use one if it make sense.
 
     def _info(self):
-        if self.config.name in (RAW, PREPROCESSED):
+        if self.config.name == PREPROCESSED and self.config.task=="qa":
             features = datasets.Features(
                 {
                     "id": datasets.Value("string"),
@@ -111,20 +115,16 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
                     ),
                 }
             )
-        elif self.config.name == PREPROC_FOR_CLASSIFICATION:
-            features = datasets.Features({
-                "id": datasets.Value("string"),
-                "context": datasets.Value("string"),
-                "question": datasets.Value("string"),
-                "label": datasets.Value("bool")
-            })
-        elif self.config.name == TOKENIZED_FOR_CLASSIFICATION:
-            features = datasets.Features({
-                "id": datasets.Value("string"),
-                "context": datasets.Sequence(datasets.Value("string")),
-                "question": datasets.Sequence(datasets.Value("string")),
-                "label": datasets.Value("bool")
-            })
+        elif self.config.name == PREPROCESSED and self.config.task == "cls":
+            features = datasets.Features(
+                {
+                    "id": datasets.Value("string"),
+                    "context": datasets.Value("string"),
+                    "question": datasets.Value("string"),
+                    "language": datasets.Value("string"),
+                    "label": datasets.Value("bool"),
+                }
+            )
         else:
             raise ValueError("Unknown config name")
         
@@ -208,7 +208,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
                 if not check_language(language):
                     continue
                 
-                if self.config.name in (RAW, PREPROCESSED):
+                if self.config.name == PREPROCESSED and self.config.task == "qa":
                     yield key, {
                         "id": data["id"],
                         "context": data["context"],
@@ -216,12 +216,13 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
                         "golds": data["golds"],
                         "language": language,
                     }
-                elif self.config.name in (PREPROC_FOR_CLASSIFICATION, TOKENIZED_FOR_CLASSIFICATION):
+                elif self.config.name == PREPROCESSED and self.config.task == "cls":
                     yield key, {
                         "id": data["id"],
                         "context": data["context"],
                         "question": data["question"],
-                        "label": data["label"],
+                        "label": any(s!=-1 for s in data["golds"]["answer_start"]),
+                        "language":language
                     }
                 else:
                     raise ValueError("Unknown config name")
