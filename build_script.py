@@ -28,12 +28,13 @@ preprocess_fn = compose(
     strip_ellipsis,
 )
 
-punc = "！？｡。＂＃＄％＆＇（）＊＋，－／：；＜＝＞＠［＼］＾＿｀｛｜｝～｟｠｢｣､、〃》「」『』【】〔〕〖〗〘〙〚〛〜〝〞〟〰〾〿–—‘’‛“”„‟…‧﹏."
+punc = "！？｡。＂＃＄％＆＇（）＊＋，－／：；＜＝＞＠［＼］＾＿｀｛｜｝～｟｠｢｣､、〃》「」『』【】〔〕〖〗〘〙〚〛〜〝〞〟〰〾〿–—‘’‛“”„‟…‧﹏.-"
 preprocess_fn2 = compose(strip_multiple_whitespaces,strip_tags,str.lower, lambda x: re.sub(r"[%s]+" % punc, "", x))
 preprocess_all = compose(
-    str.strip,
-    preprocess_fn,
     strip_multiple_whitespaces,
+    str.strip,
+    strip_punctuation,
+    preprocess_fn,
     strip_tags,
     str.lower,
     curry(re.sub, r"[%s]+" % punc, ""),
