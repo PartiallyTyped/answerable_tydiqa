@@ -30,6 +30,7 @@ preprocess_fn = compose(
 punc = "！？｡。＂＃＄％＆＇（）＊＋，－／：；＜＝＞＠［＼］＾＿｀｛｜｝～｟｠｢｣､、〃》「」『』【】〔〕〖〗〘〙〚〛〜〝〞〟〰〾〿–—‘’‛“”„‟…‧﹏."
 preprocess_fn2 = compose(strip_multiple_whitespaces,strip_tags,str.lower, lambda x: re.sub(r"[%s]+" % punc, "", x))
 preprocess_all = compose(
+    str.strip,
     preprocess_fn,
     strip_multiple_whitespaces,
     strip_tags,

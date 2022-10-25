@@ -62,7 +62,7 @@ class TydiqaBuilderConfig(datasets.BuilderConfig):
         self.monolingual = monolingual
 
 
-VERSION = datasets.Version("1.1.4")
+VERSION = datasets.Version("1.1.5")
 PREPROCESSED="preprocessed"
 PREPROC_FOR_CLASSIFICATION = "preprocessed for classification"
 TOKENIZED_FOR_CLASSIFICATION = "tokenized for classification"
