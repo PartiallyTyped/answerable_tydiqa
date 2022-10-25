@@ -54,15 +54,12 @@ class TydiqaBuilderConfig(datasets.BuilderConfig):
     """BuilderConfig for AnswerableTydiqa"""
     language:str = "english"
     monolingual:bool = True
-    task:Literal["cls", "qa"]= "none"
     def __init__(self, **kwargs):
         language = kwargs.pop("language", "all")
         monolingual = kwargs.pop("monolingual", True)
-        task = kwargs.pop("task", "qa")
         super().__init__(**kwargs)
         self.language = language
         self.monolingual = monolingual
-        self.task = task
 
 
 VERSION = datasets.Version("1.1.1")
@@ -100,7 +97,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
     DEFAULT_CONFIG_NAME = RAW # It's not mandatory to have a default configuration. Just use one if it make sense.
 
     def _info(self):
-        if self.config.name == PREPROCESSED and self.config.task=="qa":
+        if self.config.name == PREPROCESSED:
             features = datasets.Features(
                 {
                     "id": datasets.Value("string"),
@@ -113,15 +110,6 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
                             "answer_start": datasets.Value("int32"),
                         }
                     ),
-                }
-            )
-        elif self.config.name == PREPROCESSED and self.config.task == "cls":
-            features = datasets.Features(
-                {
-                    "id": datasets.Value("string"),
-                    "context": datasets.Value("string"),
-                    "question": datasets.Value("string"),
-                    "language": datasets.Value("string"),
                     "label": datasets.Value("bool"),
                 }
             )
@@ -207,21 +195,14 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
                 if not check_language(language):
                     continue
                 
-                if self.config.name == PREPROCESSED and self.config.task == "qa":
+                if self.config.name == PREPROCESSED:
                     yield key, {
                         "id": data["id"],
                         "context": data["context"],
                         "question": data["question"],
                         "golds": data["golds"],
                         "language": language,
-                    }
-                elif self.config.name == PREPROCESSED and self.config.task == "cls":
-                    yield key, {
-                        "id": data["id"],
-                        "context": data["context"],
-                        "question": data["question"],
                         "label": any(s!=-1 for s in data["golds"]["answer_start"]),
-                        "language":language
                     }
                 else:
                     raise ValueError("Unknown config name")
