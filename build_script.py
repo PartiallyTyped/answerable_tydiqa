@@ -33,7 +33,6 @@ punc = "！？｡。＂＃＄％＆＇（）＊＋，－／：；＜＝＞＠［
 preprocess_fn2 = compose(strip_multiple_whitespaces,strip_tags,str.lower, lambda x: re.sub(r"[%s]+" % punc, "", x))
 preprocess_all = compose(
     strip_multiple_whitespaces,
-    strip_non_alphanum,
     str.strip,
     strip_punctuation,
     preprocess_fn,
