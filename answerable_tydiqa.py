@@ -21,6 +21,7 @@ import os
 from typing import Literal
 
 import datasets
+from matplotlib.path import Path
 
 
 # TODO: Add BibTeX citation
@@ -105,8 +106,25 @@ FEATURES = {
                     "label": datasets.Value("bool"),
                     **COMMON_FEATURES,
                 }
-            )
-    
+            ),
+    HASHINGTRICK: datasets.Features(
+        {
+            "embeddings": datasets.features.Sequence(datasets.Value("float32")),
+            "label": datasets.Value("bool"),
+            "id": datasets.Value("string"),
+            "language": datasets.Value("string"),
+        }
+    ),
+    HASHINGTRICK_BPEMB: datasets.Features(
+        {
+            "embeddings": datasets.features.Sequence(datasets.Value("float32")),
+            "context": datasets.features.Sequence(datasets.Value("int32")),
+            "question": datasets.features.Sequence(datasets.Value("int32")),
+            "label": datasets.Value("bool"),
+            "id": datasets.Value("string"),
+            "language": datasets.Value("string"),
+        }
+    ),
 }
 
 
@@ -175,7 +193,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
             HASHINGTRICK: HASHINGTRICK,
             HASHINGTRICK_BPEMB: HASHINGTRICK_BPEMB,
         }[self.config.name]
-        url = "https://raw.githubusercontent.com/PartiallyTyped/answerable_tydiqa/data/{split}/{name}.json"
+        url = "https://raw.githubusercontent.com/PartiallyTyped/answerable_tydiqa/data/{split}/{name}.pq"
         urls = {
             "train": url.format(split="train", name=name),
             "validation": url.format(split="validation", name=name),
@@ -218,25 +236,22 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
             s = {"finnish", "english", "japanese"}
             s.remove(language)
             check_language = s.__contains__
-
-        with open(filepath, encoding="utf-8") as f:
-            for key, row in enumerate(f):
-                data = json.loads(row)
-                language = data["language"]
-                
-                if not check_language(language):
-                    continue
-                
-                if self.config.name == PREPROCESSED:
-                    yield key, extract_preprocessed(data)
-                elif self.config.name in (TOKENIZED, BPEMB):
-                    yield key, extract_tokenized(data)
-                elif self.config.name == HASHINGTRICK:
-                    yield key, extract_hashingtrick(data)
-                elif self.config.name == HASHINGTRICK_BPEMB:
-                    yield key, extract_hashingtrick_bpemb(data)
-                else:
-                    raise ValueError("Unknown config name")
+        path = Path(filepath)
+        # if the extension is parquet
+        ds = datasets.load.load_dataset(path)
+        for i, data in enumerate(ds):
+            if not check_language(data["language"]):
+                continue
+            if self.config.name == PREPROCESSED:
+                yield i, extract_preprocessed(data)
+            elif self.config.name in (TOKENIZED, BPEMB):
+                yield i, extract_tokenized(data)
+            elif self.config.name == HASHINGTRICK:
+                yield i, extract_hashingtrick(data)
+            elif self.config.name == HASHINGTRICK_BPEMB:
+                yield i, extract_hashingtrick_bpemb(data)
+            else:
+                raise ValueError("Unknown config name")
 
 
 def extract_hashingtrick(data):

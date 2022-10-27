@@ -123,9 +123,9 @@ def build_preprocessed():
     distributed = out.map(distribute, batched=True, batch_size=1, remove_columns=["context", "question", "language", "answers", "passes_test"])
     print(distributed)
     for key, value in distributed.items():
-        path = pl.Path(f"{key}/preprocessed.json")
+        path = pl.Path(f"{key}/preprocessed.pq")
         path.parent.mkdir(parents=True, exist_ok=True)
-        value.to_json(path)
+        value.to_parquet(path)
 
     return out
 
@@ -171,9 +171,9 @@ def build_tokenized():
     ds = ds.map(tokenize)
 
     for key, value in ds.items():
-        path = pl.Path(f"{key}/tokenized.json")
+        path = pl.Path(f"{key}/tokenized.pq")
         path.parent.mkdir(parents=True, exist_ok=True)
-        value.to_json(path)
+        value.to_parquet(path)
 
 def build_bpemb():
     from bpemb import BPEmb
@@ -207,9 +207,9 @@ def build_bpemb():
         }
     ds = tokenized.map(encode)
     for key, value in ds.items():
-        path = pl.Path(f"{key}/bpemb.json")
+        path = pl.Path(f"{key}/bpemb.pq")
         path.parent.mkdir(parents=True, exist_ok=True)
-        value.to_json(path)
+        value.to_parquet(path)
 
 def create_hashingtrick():
     """
@@ -233,8 +233,8 @@ def create_hashingtrick():
         question = example["question"]
         language = example["language"]
         iob_labels = example["iob_label"]
-        vectorizer = HashingVectorizer(n_features=256, ngram_range=(1, 4))
-        embeddings = vectorizer.transform([" ".join(context), " ".join(question)]).toarray().reshape(1, 512)
+        vectorizer = HashingVectorizer(n_features=128, ngram_range=(1, 4))
+        embeddings = vectorizer.transform([" ".join(context), " ".join(question)]).toarray().reshape(1, 256)
         label = any(iob_labels)
 
         return {
@@ -243,11 +243,11 @@ def create_hashingtrick():
             "id": example["id"],
             "language": language,
         }
-    ds = tokenized.map(hash)
+    ds = tokenized.map(hash, remove_columns=tokenized["train"].column_names)
     for key, value in ds.items():
-        path = pl.Path(f"{key}/hashingtrick.json")
+        path = pl.Path(f"{key}/hashingtrick.pq")
         path.parent.mkdir(parents=True, exist_ok=True)
-        value.to_json(path)
+        value.to_parquet(path)
 
 def create_hashingtrick_bpemb():
     """
@@ -265,8 +265,8 @@ def create_hashingtrick_bpemb():
         question = example["question"]
         language = example["language"]
         iob_labels = example["iob_label"]
-        vectorizer = HashingVectorizer(n_features=256, ngram_range=(1, 4))
-        embeddings = vectorizer.transform([" ".join(map(str, context)), " ".join(map(str, question))]).toarray().reshape(1, 512)
+        vectorizer = HashingVectorizer(n_features=128, ngram_range=(1, 4))
+        embeddings = vectorizer.transform([" ".join(map(str, context)), " ".join(map(str, question))]).toarray().reshape(1, -1)
         label = any(iob_labels)
 
         return {
@@ -277,11 +277,11 @@ def create_hashingtrick_bpemb():
             "context": example["context"],
             "question": example["question"],
         }
-    ds = bpemb.map(hash)
+    ds = bpemb.map(hash, remove_columns=["iob_label", "golds"])
     for key, value in ds.items():
-        path = pl.Path(f"{key}/hashingtrick_bpemb.json")
+        path = pl.Path(f"{key}/hashingtrick_bpemb.pq")
         path.parent.mkdir(parents=True, exist_ok=True)
-        value.to_json(path)
+        value.to_parquet(path)
 
 def main(_):
     if MODE.value == "preprocessed":
@@ -294,7 +294,6 @@ def main(_):
         create_hashingtrick()
     elif MODE.value == "htbpemb":
         create_hashingtrick_bpemb()
-
     else:
         raise ValueError("Not implemented yet")
     
