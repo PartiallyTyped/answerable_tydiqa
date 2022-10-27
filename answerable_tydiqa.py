@@ -22,7 +22,8 @@ from typing import Literal
 import pyarrow.parquet as pq
 import datasets
 from pathlib import Path
-
+from transformers import AutoTokenizer
+from toolz import curry
 
 # TODO: Add BibTeX citation
 # Find for instance the citation on arxiv or on the dataset repo/website
@@ -51,6 +52,15 @@ _LICENSE = ""
 # The HuggingFace Datasets library doesn't host the datasets but only points to the original files.
 # This can be an arbitrary nested dict/list of URLs (see below in `_split_generators` method)
 
+VERSION = datasets.Version("2.0.1")
+RAW="raw"
+PREPROCESSED="preprocessed"
+TOKENIZED = "tokenized"
+BPEMB = "bpemb"
+HASHINGTRICK = "hashingtrick"
+HASHINGTRICK_BPEMB = "hashingtrick_bpemb"
+TRANSFORMERS = "transformers"
+
 class TydiqaBuilderConfig(datasets.BuilderConfig):
     """BuilderConfig for AnswerableTydiqa"""
     language:str = "english"
@@ -62,15 +72,14 @@ class TydiqaBuilderConfig(datasets.BuilderConfig):
         self.language = language
         self.monolingual = monolingual
 
-
-VERSION = datasets.Version("2.0.1")
-PREPROCESSED="preprocessed"
-TOKENIZED = "tokenized"
-BPEMB = "bpemb"
-HASHINGTRICK = "hashingtrick"
-HASHINGTRICK_BPEMB = "hashingtrick_bpemb"
-
-
+class TydiqaTransformerConfig(TydiqaBuilderConfig):
+    def __init__(self,
+        source_dataset:Literal["raw", "preprocessed"]=RAW, tokenizer="xlm-roberta-base", pad_token=None, cls_token=None, **kwargs):
+        super().__init__(**kwargs)
+        self.tokenizer = tokenizer
+        self.padding_token = pad_token
+        self.cls_token = cls_token
+        self.source_dataset = source_dataset
 
 COMMON_FEATURES = {
     "id": datasets.Value("string"),
@@ -83,6 +92,11 @@ COMMON_FEATURES = {
                 ),
 }
 FEATURES = {
+    RAW: datasets.Features({
+        **COMMON_FEATURES,
+        "context": datasets.Value("string"),
+        "question": datasets.Value("string"),
+    }),
     BPEMB: datasets.Features({
                 "iob_label": datasets.features.Sequence(datasets.Value("int32")),
                 "cls_label": datasets.Value("bool"),
@@ -125,15 +139,16 @@ FEATURES = {
             "language": datasets.Value("string"),
         }
     ),
-    # TRANSFORMERS: datasets.Features(
-    #     {
-    #         "input_ids": datasets.features.Sequence(datasets.Value("int32")),
-    #         "attention_mask": datasets.features.Sequence(datasets.Value("int32")),
-    #         "iob_label": datasets.features.Sequence(datasets.Value("int32")),
-    #         "cls_label": datasets.Value("bool"),
-    #         "id": datasets.Value("string"),
-    #     }
-    # )
+    TRANSFORMERS: datasets.Features(
+        {
+            "context_ids": datasets.features.Sequence(datasets.features.Sequence(datasets.Value("int32"))),
+            "question_ids": datasets.features.Sequence(datasets.features.Sequence(datasets.Value("int32"))),
+            "iob_label": datasets.features.Sequence(datasets.Value("int32")),
+            "token_type_ids": datasets.features.Sequence(datasets.Value("int32")),
+            "cls_label": datasets.Value("bool"),
+            **COMMON_FEATURES,
+        }
+    )
 }
 
 
@@ -195,7 +210,9 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
             BPEMB: BPEMB,
             HASHINGTRICK: HASHINGTRICK,
             HASHINGTRICK_BPEMB: HASHINGTRICK_BPEMB,
+            TRANSFORMERS: getattr(self.config, "source_dataset", "raw")
         }[self.config.name]
+
         url = "https://raw.githubusercontent.com/PartiallyTyped/answerable_tydiqa/data/{split}/{name}.pq"
         urls = {
             "train": url.format(split="train", name=name),
@@ -242,8 +259,18 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
             check_language = s.__contains__
         # if the extension is parquet
 
-        
         ds = datasets.Dataset(pq.read_table(filepath, memory_map=True))
+
+        if self.config.name == TRANSFORMERS:
+            tokenizer = AutoTokenizer.from_pretrained(self.config.tokenizer)
+            if self.config.pad_token is not None:
+                tokenizer.add_special_tokens({"pad_token": self.config.pad_token})
+            if self.config.cls_token is not None:
+                tokenizer.add_special_tokens({"cls_token": self.config.cls_token})
+            
+            extract_transformer = extract_transformer_(tokenizer)
+
+        
         for i, data in enumerate(ds):
             if not check_language(data["language"]):
                 continue
@@ -255,8 +282,34 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
                 yield i, extract_hashingtrick(data)
             elif self.config.name == HASHINGTRICK_BPEMB:
                 yield i, extract_hashingtrick_bpemb(data)
+            elif self.config.name == TRANSFORMERS:
+                yield i, extract_transformer(data)
             else:
                 raise ValueError("Unknown config name")
+
+@curry
+def extract_transformer_(tokenizer, data):
+    context = data["context"]
+    question = data["question"]
+    golds = data["golds"]
+    answer_start = golds["answer_start"][0]
+    answer = golds["answer_text"][0]
+    answer_end = answer_start + len(answer)
+
+    encodings = tokenizer(
+        context,
+        question,
+        return_tensors="np",
+        return_offsets_mapping=True,
+        return_token_type_ids=True,
+        return_attention_mask=False,
+    )
+    offset_mapping = encodings.pop("offset_mapping")
+    token_type_ids = encodings.pop("token_type_ids")
+    input_ids = encodings["input_ids"]
+
+    # context_token_mask = 
+
 
 
 def extract_hashingtrick(data):
