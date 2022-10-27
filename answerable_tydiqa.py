@@ -21,7 +21,7 @@ import os
 from typing import Literal
 
 import datasets
-from matplotlib.path import Path
+from pathlib import Path
 
 
 # TODO: Add BibTeX citation
@@ -63,7 +63,7 @@ class TydiqaBuilderConfig(datasets.BuilderConfig):
         self.monolingual = monolingual
 
 
-VERSION = datasets.Version("1.3.1")
+VERSION = datasets.Version("2.0.0")
 PREPROCESSED="preprocessed"
 TOKENIZED = "tokenized"
 BPEMB = "bpemb"
