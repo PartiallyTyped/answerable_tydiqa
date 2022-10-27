@@ -43,7 +43,7 @@ preprocess_all = compose(
     curry(re.sub, r"[%s]+" % punc, ""),
 )
 
-MODE = flags.DEFINE_enum("mode", None, ["preprocessed", "tokenized", "bpemb"], "Which data to build")
+MODE = flags.DEFINE_enum("mode", None, ["preprocessed", "tokenized", "bpemb", "ht", "htbpemb"], "Which data to build")
 DATASET_PATH = "PartiallyTyped/answerable_tydiqa"
 
 def build_preprocessed():
@@ -266,7 +266,7 @@ def create_hashingtrick_bpemb():
         language = example["language"]
         iob_labels = example["iob_label"]
         vectorizer = HashingVectorizer(n_features=256, ngram_range=(1, 4))
-        embeddings = vectorizer.transform([" ".join(context), " ".join(question)]).toarray().reshape(1, 512)
+        embeddings = vectorizer.transform([" ".join(map(str, context)), " ".join(map(str, question))]).toarray().reshape(1, 512)
         label = any(iob_labels)
 
         return {
@@ -290,6 +290,11 @@ def main(_):
         build_tokenized()
     elif MODE.value == "bpemb":
         build_bpemb()
+    elif MODE.value == "ht":
+        create_hashingtrick()
+    elif MODE.value == "htbpemb":
+        create_hashingtrick_bpemb()
+
     else:
         raise ValueError("Not implemented yet")
     
