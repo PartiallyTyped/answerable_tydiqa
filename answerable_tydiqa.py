@@ -62,10 +62,54 @@ class TydiqaBuilderConfig(datasets.BuilderConfig):
         self.monolingual = monolingual
 
 
-VERSION = datasets.Version("1.2.0")
+VERSION = datasets.Version("1.3.0")
 PREPROCESSED="preprocessed"
 TOKENIZED = "tokenized"
 BPEMB = "bpemb"
+HASHINGTRICK = "hashingtrick"
+HASHINGTRICK_BPEMB = "hashingtrick_bpemb"
+
+
+
+COMMON_FEATURES = {
+    "id": datasets.Value("string"),
+    "language": datasets.Value("string"),
+    "golds": datasets.features.Sequence(
+                        {
+                            "answer_text": datasets.Value("string"),
+                            "answer_start": datasets.Value("int32"),
+                        }
+                ),
+}
+FEATURES = {
+    BPEMB: datasets.Features({
+                "iob_label": datasets.features.Sequence(datasets.Value("int32")),
+                "cls_label": datasets.Value("bool"),
+                "context": datasets.features.Sequence(datasets.Value("int32")),
+                "question": datasets.features.Sequence(datasets.Value("int32")),
+                **COMMON_FEATURES,
+    }),
+    TOKENIZED: datasets.Features(
+                {
+                    "iob_label": datasets.features.Sequence(datasets.Value("int32")),
+                    "cls_label": datasets.Value("bool"),
+                    "context": datasets.features.Sequence(datasets.Value("string")),
+                    "question": datasets.features.Sequence(datasets.Value("string")),
+                    **COMMON_FEATURES,
+                }
+            ),
+    PREPROCESSED: datasets.Features(
+                {
+                    "context": datasets.Value("string"),
+                    "question": datasets.Value("string"),
+                    "label": datasets.Value("bool"),
+                    **COMMON_FEATURES,
+                }
+            )
+    
+}
+
+
 class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
     """TODO: Short description of my dataset."""
 
@@ -92,61 +136,14 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         TydiqaBuilderConfig(name=PREPROCESSED, version=VERSION),
         TydiqaBuilderConfig(name=TOKENIZED, version=VERSION),
         TydiqaBuilderConfig(name=BPEMB, version=VERSION),
+        TydiqaBuilderConfig(name=HASHINGTRICK, version=VERSION),
+        TydiqaBuilderConfig(name=HASHINGTRICK_BPEMB, version=VERSION),
     ]
 
     DEFAULT_CONFIG_NAME = PREPROCESSED # It's not mandatory to have a default configuration. Just use one if it make sense.
 
     def _info(self):
-        if self.config.name == PREPROCESSED:
-            features = datasets.Features(
-                {
-                    "id": datasets.Value("string"),
-                    "context": datasets.Value("string"),
-                    "question": datasets.Value("string"),
-                    "language": datasets.Value("string"),
-                    "golds": datasets.features.Sequence(
-                        {
-                            "answer_text": datasets.Value("string"),
-                            "answer_start": datasets.Value("int32"),
-                        }
-                    ),
-                    "label": datasets.Value("bool"),
-                }
-            )
-        elif self.config.name == TOKENIZED:
-            features = datasets.Features(
-                {
-                    "id": datasets.Value("string"),
-                    "iob_label": datasets.features.Sequence(datasets.Value("int32")),
-                    "cls_label": datasets.Value("bool"),
-                    "context": datasets.features.Sequence(datasets.Value("string")),
-                    "question": datasets.features.Sequence(datasets.Value("string")),
-                    "language": datasets.Value("string"),
-                    "golds": datasets.features.Sequence(
-                        {
-                            "answer_text": datasets.Value("string"),
-                            "answer_start": datasets.Value("int32"),
-                        }
-                    ),
-                }
-            )
-        elif self.config.name == BPEMB:
-            features = datasets.Features({
-                "iob_label": datasets.features.Sequence(datasets.Value("int32")),
-                "cls_label": datasets.Value("bool"),
-                "context": datasets.features.Sequence(datasets.Value("int32")),
-                "question": datasets.features.Sequence(datasets.Value("int32")),
-                "language": datasets.Value("string"),
-                "id": datasets.Value("string"),
-                "golds": datasets.features.Sequence(
-                        {
-                            "answer_text": datasets.Value("string"),
-                            "answer_start": datasets.Value("int32"),
-                        }
-                    ),
-                })
-        else:
-            raise ValueError("Unknown config name")
+        features = FEATURES[self.config.name]
         
         return datasets.DatasetInfo(
             # This is the description that will appear on the datasets page.
@@ -175,6 +172,8 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
             PREPROCESSED: PREPROCESSED,
             TOKENIZED: TOKENIZED,
             BPEMB: BPEMB,
+            HASHINGTRICK: HASHINGTRICK,
+            HASHINGTRICK_BPEMB: HASHINGTRICK_BPEMB,
         }[self.config.name]
         url = "https://raw.githubusercontent.com/PartiallyTyped/answerable_tydiqa/data/{split}/{name}.json"
         urls = {
@@ -229,24 +228,52 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
                     continue
                 
                 if self.config.name == PREPROCESSED:
-                    yield key, {
-                        "id": data["id"],
-                        "context": data["context"],
-                        "question": data["question"],
-                        "golds": data["golds"],
-                        "language": language,
-                        "label": any(s!=-1 for s in data["golds"]["answer_start"]),
-                    }
+                    yield key, extract_preprocessed(data)
                 elif self.config.name in (TOKENIZED, BPEMB):
-                    yield key, {
-                        "id": data["id"],
-                        "iob_label": data["iob_label"],
-                        "cls_label": any(data["iob_label"]),
-                        "context": data["context"],
-                        "question": data["question"],
-                        "golds": data["golds"],
-                        "language": language,
-                    }
+                    yield key, extract_tokenized(data)
+                elif self.config.name == HASHINGTRICK:
+                    yield key, extract_hashingtrick(data)
+                elif self.config.name == HASHINGTRICK_BPEMB:
+                    yield key, extract_hashingtrick_bpemb(data)
                 else:
                     raise ValueError("Unknown config name")
 
+
+def extract_hashingtrick(data):
+    return {
+        "id": data["id"],
+        "language": data["language"],
+        "label": data["label"],
+        "embeddings": data["embeddings"],
+    }
+
+def extract_hashingtrick_bpemb(data):
+    return {
+        "id": data["id"],
+        "language": data["language"],
+        "label": data["label"],
+        "embeddings": data["embeddings"],
+        "context": data["context"],
+        "question": data["question"],
+    }
+
+def extract_preprocessed(data):
+    return {
+            "id": data["id"],
+            "context": data["context"],
+            "question": data["question"],
+            "golds": data["golds"],
+            "language": data["language"],
+            "label": any(s!=-1 for s in data["golds"]["answer_start"]),
+        }
+
+def extract_tokenized(data):
+    return {
+        "id": data["id"],
+        "iob_label": data["iob_label"],
+        "context": data["context"],
+        "question": data["question"],
+        "golds": data["golds"],
+        "language": data["language"],
+        "cls_label": any(data["iob_label"]),
+    }

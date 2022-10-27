@@ -15,6 +15,8 @@ import pathlib as pl
 import nltk
 from itertools import compress
 
+from sklearn.feature_extraction.text import HashingVectorizer
+
 strip_references = curry(re.sub)(r"\[\d+\]", "")
 strip_quotes = curry(re.sub)(r"['\"]", "")
 strip_double_quotes = curry(re.sub)(r"['\"]{2}", "")
@@ -42,6 +44,7 @@ preprocess_all = compose(
 )
 
 MODE = flags.DEFINE_enum("mode", None, ["preprocessed", "tokenized", "bpemb"], "Which data to build")
+DATASET_PATH = "PartiallyTyped/answerable_tydiqa"
 
 def build_preprocessed():
     processors = {
@@ -164,7 +167,7 @@ def build_tokenized():
             "golds": golds,
         }
 
-    ds = D.load_dataset("PartiallyTyped/answerable_tydiqa", "preprocessed")
+    ds = D.load_dataset(DATASET_PATH, "preprocessed")
     ds = ds.map(tokenize)
 
     for key, value in ds.items():
@@ -174,7 +177,7 @@ def build_tokenized():
 
 def build_bpemb():
     from bpemb import BPEmb
-    tokenized = D.load_dataset("PartiallyTyped/answerable_tydiqa", "tokenized")
+    tokenized = D.load_dataset(DATASET_PATH, "tokenized")
     encoders = {
         "english": BPEmb(lang="en", vs=100000, dim=300),
         "finnish": BPEmb(lang="fi", vs=100000, dim=300),
@@ -207,7 +210,78 @@ def build_bpemb():
         path = pl.Path(f"{key}/bpemb.json")
         path.parent.mkdir(parents=True, exist_ok=True)
         value.to_json(path)
-    
+
+def create_hashingtrick():
+    """
+    load tokenized dataset
+    join context tokens with space
+    join question tokens with space
+    create a 2x256 dimensional matrix using a hashing vectorizer
+    reshape the input to 512
+    with each example having
+    {
+        label: any(iob_labels)
+        embeddings: the 512 dimensional vector
+        id: the id of the example
+        language: the language of the example
+    }
+    """
+
+    tokenized = D.load_dataset(DATASET_PATH, "tokenized")
+    def hash(example):
+        context = example["context"]
+        question = example["question"]
+        language = example["language"]
+        iob_labels = example["iob_label"]
+        vectorizer = HashingVectorizer(n_features=256, ngram_range=(1, 4))
+        embeddings = vectorizer.transform([" ".join(context), " ".join(question)]).toarray().reshape(1, 512)
+        label = any(iob_labels)
+
+        return {
+            "label": label,
+            "embeddings": embeddings,
+            "id": example["id"],
+            "language": language,
+        }
+    ds = tokenized.map(hash)
+    for key, value in ds.items():
+        path = pl.Path(f"{key}/hashingtrick.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        value.to_json(path)
+
+def create_hashingtrick_bpemb():
+    """
+    load bpemb,
+    turn the context to string by joining it with " "
+    turn the question to string by joining it with " "
+    use a hashing vectorizer to create a representation for the two strings like above
+
+    create a field 'embedding' that contains a 512-dimensional vector of the hashing embeddings
+    along with all fields from bpemb encoded dataset
+    """
+    bpemb = D.load_dataset(DATASET_PATH, "bpemb")
+    def hash(example):
+        context = example["context"]
+        question = example["question"]
+        language = example["language"]
+        iob_labels = example["iob_label"]
+        vectorizer = HashingVectorizer(n_features=256, ngram_range=(1, 4))
+        embeddings = vectorizer.transform([" ".join(context), " ".join(question)]).toarray().reshape(1, 512)
+        label = any(iob_labels)
+
+        return {
+            "label": label,
+            "embeddings": embeddings,
+            "id": example["id"],
+            "language": language,
+            "context": example["context"],
+            "question": example["question"],
+        }
+    ds = bpemb.map(hash)
+    for key, value in ds.items():
+        path = pl.Path(f"{key}/hashingtrick_bpemb.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        value.to_json(path)
 
 def main(_):
     if MODE.value == "preprocessed":
