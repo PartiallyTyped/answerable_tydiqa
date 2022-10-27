@@ -233,8 +233,8 @@ def create_hashingtrick():
         question = example["question"]
         language = example["language"]
         iob_labels = example["iob_label"]
-        vectorizer = HashingVectorizer(n_features=128, ngram_range=(1, 4))
-        embeddings = vectorizer.transform([" ".join(context), " ".join(question)]).toarray().reshape(1, 256)
+        vectorizer = HashingVectorizer(n_features=256, ngram_range=(1, 4))
+        embeddings = vectorizer.transform([" ".join(context), " ".join(question)]).toarray().reshape(1, 512)
         label = any(iob_labels)
 
         return {
@@ -265,7 +265,7 @@ def create_hashingtrick_bpemb():
         question = example["question"]
         language = example["language"]
         iob_labels = example["iob_label"]
-        vectorizer = HashingVectorizer(n_features=128, ngram_range=(1, 4))
+        vectorizer = HashingVectorizer(n_features=256, ngram_range=(1, 4))
         embeddings = vectorizer.transform([" ".join(map(str, context)), " ".join(map(str, question))]).toarray().reshape(1, -1)
         label = any(iob_labels)
 
