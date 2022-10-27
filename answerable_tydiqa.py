@@ -198,6 +198,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
             "train": url.format(split="train", name=name),
             "validation": url.format(split="validation", name=name),
         }
+        print(urls)
         data_dir = dl_manager.download_and_extract(urls)
      
         return [
@@ -237,6 +238,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
             s.remove(language)
             check_language = s.__contains__
         # if the extension is parquet
+        print(filepath)
         ds = datasets.load_dataset(filepath)
         for i, data in enumerate(ds):
             if not check_language(data["language"]):
