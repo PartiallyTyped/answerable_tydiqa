@@ -236,9 +236,8 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
             s = {"finnish", "english", "japanese"}
             s.remove(language)
             check_language = s.__contains__
-        path = Path(filepath)
         # if the extension is parquet
-        ds = datasets.load.load_dataset(path)
+        ds = datasets.load_dataset(filepath)
         for i, data in enumerate(ds):
             if not check_language(data["language"]):
                 continue
