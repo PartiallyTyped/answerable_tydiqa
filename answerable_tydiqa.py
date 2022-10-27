@@ -19,7 +19,7 @@ import csv
 import json
 import os
 from typing import Literal
-
+import pyarrow.parquet as pq
 import datasets
 from pathlib import Path
 
@@ -238,8 +238,9 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
             s.remove(language)
             check_language = s.__contains__
         # if the extension is parquet
-        print(filepath)
-        ds = datasets.load_dataset(filepath)
+
+        
+        ds = datasets.Dataset(pq.read_table(filepath, memory_map=True))
         for i, data in enumerate(ds):
             if not check_language(data["language"]):
                 continue
