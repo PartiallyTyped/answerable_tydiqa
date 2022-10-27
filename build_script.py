@@ -123,9 +123,9 @@ def build_preprocessed():
     distributed = out.map(distribute, batched=True, batch_size=1, remove_columns=["context", "question", "language", "answers", "passes_test"])
     print(distributed)
     for key, value in distributed.items():
-        path = pl.Path(f"{key}/preprocessed.json")
+        path = pl.Path(f"{key}/preprocessed.pq")
         path.parent.mkdir(parents=True, exist_ok=True)
-        value.to_json(path)
+        value.to_parquet(path)
 
     return out
 
@@ -171,9 +171,9 @@ def build_tokenized():
     ds = ds.map(tokenize)
 
     for key, value in ds.items():
-        path = pl.Path(f"{key}/tokenized.json")
+        path = pl.Path(f"{key}/tokenized.pq")
         path.parent.mkdir(parents=True, exist_ok=True)
-        value.to_json(path)
+        value.to_parquet(path)
 
 def build_bpemb():
     from bpemb import BPEmb
@@ -207,9 +207,9 @@ def build_bpemb():
         }
     ds = tokenized.map(encode)
     for key, value in ds.items():
-        path = pl.Path(f"{key}/bpemb.json")
+        path = pl.Path(f"{key}/bpemb.pq")
         path.parent.mkdir(parents=True, exist_ok=True)
-        value.to_json(path)
+        value.to_parquet(path)
 
 def create_hashingtrick():
     """
@@ -245,7 +245,7 @@ def create_hashingtrick():
         }
     ds = tokenized.map(hash, remove_columns=tokenized["train"].column_names)
     for key, value in ds.items():
-        path = pl.Path(f"{key}/hashingtrick.pk")
+        path = pl.Path(f"{key}/hashingtrick.pq")
         path.parent.mkdir(parents=True, exist_ok=True)
         value.to_parquet(path)
 
@@ -279,7 +279,7 @@ def create_hashingtrick_bpemb():
         }
     ds = bpemb.map(hash, remove_columns=["iob_label", "golds"])
     for key, value in ds.items():
-        path = pl.Path(f"{key}/hashingtrick_bpemb.pk")
+        path = pl.Path(f"{key}/hashingtrick_bpemb.pq")
         path.parent.mkdir(parents=True, exist_ok=True)
         value.to_parquet(path)
 
