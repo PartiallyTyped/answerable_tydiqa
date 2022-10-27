@@ -109,7 +109,7 @@ FEATURES = {
             ),
     HASHINGTRICK: datasets.Features(
         {
-            "embeddings": datasets.features.Sequence(datasets.Value("float32")),
+            "embeddings": datasets.features.Sequence(datasets.features.Sequence(datasets.Value("float32"))),
             "label": datasets.Value("bool"),
             "id": datasets.Value("string"),
             "language": datasets.Value("string"),
@@ -117,7 +117,7 @@ FEATURES = {
     ),
     HASHINGTRICK_BPEMB: datasets.Features(
         {
-            "embeddings": datasets.features.Sequence(datasets.Value("float32")),
+            "embeddings": datasets.features.Sequence(datasets.features.Sequence(datasets.Value("float32"))),
             "context": datasets.features.Sequence(datasets.Value("int32")),
             "question": datasets.features.Sequence(datasets.Value("int32")),
             "label": datasets.Value("bool"),
@@ -125,6 +125,15 @@ FEATURES = {
             "language": datasets.Value("string"),
         }
     ),
+    # TRANSFORMERS: datasets.Features(
+    #     {
+    #         "input_ids": datasets.features.Sequence(datasets.Value("int32")),
+    #         "attention_mask": datasets.features.Sequence(datasets.Value("int32")),
+    #         "iob_label": datasets.features.Sequence(datasets.Value("int32")),
+    #         "cls_label": datasets.Value("bool"),
+    #         "id": datasets.Value("string"),
+    #     }
+    # )
 }
 
 
