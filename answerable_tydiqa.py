@@ -143,12 +143,6 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
     # You will be able to load one or the other configurations in the following list with
     # data = datasets.load_dataset('my_dataset', 'first_domain')
     # data = datasets.load_dataset('my_dataset', 'second_domain')
-    # BUILDER_CONFIGS = [
-        # TydiqaBuilderConfig(name=name, version=VERSION)
-        # for language in ["english", "finnish", "japanese"]
-        # for monolingual in [True, False]
-        # for name in [RAW, PREPROCESSED, PREPROC_FOR_CLASSIFICATION, TOKENIZED_FOR_CLASSIFICATION]
-    # ]
     BUILDER_CONFIGS = [
         # TydiqaBuilderConfig(name="raw", version=VERSION),
         TydiqaBuilderConfig(name=PREPROCESSED, version=VERSION),
