@@ -131,6 +131,8 @@ class RawConfig(TydiqaBuilderConfig):
         )
         if self.split_to_sentences:
             ds = ds.map(self.separate_sentences, batched=True, batch_size=1, fn_kwargs={"tokenizers": tokenizers}, remove_columns=["annotations"])
+        else:
+            ds = ds.rename_columns({"annotations": "golds"})
         return ds
 
     @staticmethod
