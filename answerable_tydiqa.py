@@ -110,7 +110,7 @@ class RawConfig(TydiqaBuilderConfig):
     def urls(self):
         return {}
 
-    def load_base_dataset(self, split):
+    def load_dataset(self, split):
         ds = load_dataset("copenlu/answerable_tydiqa", split=split)
         if self.language == "all":
             languages = {"english", "finnish", "japanese"}
