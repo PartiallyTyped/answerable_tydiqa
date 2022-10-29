@@ -243,8 +243,8 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         # The `key` is for legacy reasons (tfds) and is not important in itself, but must be unique for each example.
 
         dataset = self.config.load_dataset(split)
-        for id_, row in dataset.iterrows():
-            yield id_, self.config.extract(row)
+        for i, row in enumerate(dataset.iterrows()):
+            yield i, self.config.extract(row)
 
 
 def extract_hashingtrick(data):
