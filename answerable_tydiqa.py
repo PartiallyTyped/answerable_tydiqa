@@ -124,7 +124,7 @@ class RawConfig(TydiqaBuilderConfig):
         tokenizers = {lang: spacy.load(model) for lang, model in tokenizers.items() if lang in languages}
 
         ds = (ds
-              .filter(languages.__contains__, input_columns=["language"], num_proc=cpu_count())
+              .filter({"english", "finnish", "japanese"}.__contains__, input_columns=["language"], num_proc=cpu_count())
               .rename_columns({"question_text": "question", "document_plaintext": "context"})
               .remove_columns(["document_url", "document_title"])
               .map(lambda example: {"seq_id": xxh128_hexdigest(example["context"] + example["question"])}, num_proc=cpu_count())
@@ -133,6 +133,7 @@ class RawConfig(TydiqaBuilderConfig):
             ds = ds.map(self.separate_sentences, batched=True, batch_size=1, fn_kwargs={"tokenizers": tokenizers}, remove_columns=["annotations"])
         else:
             ds = ds.rename_columns({"annotations": "golds"})
+        ds = ds.filter(languages.__contains__, input_columns=["language"], num_proc=cpu_count())
         return ds
 
     @staticmethod
@@ -177,7 +178,6 @@ class RawConfig(TydiqaBuilderConfig):
     @staticmethod
     def extract(example):
         return example
-
 
 class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
     """TODO: Short description of my dataset."""
