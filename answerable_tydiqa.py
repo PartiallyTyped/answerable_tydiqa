@@ -14,15 +14,19 @@
 # TODO: Address all TODOs and remove all explanatory comments
 """TODO: Add a description here."""
 
-
 import csv
 import json
 import os
+from collections import defaultdict
 from typing import Literal
 import pyarrow.parquet as pq
 import datasets
 from pathlib import Path
 
+import spacy
+from datasets import load_dataset
+from xxhash import xxh128_hexdigest
+from multiprocessing import cpu_count
 
 # TODO: Add BibTeX citation
 # Find for instance the citation on arxiv or on the dataset repo/website
@@ -47,99 +51,134 @@ _HOMEPAGE = ""
 # TODO: Add the licence for the dataset here if you can find it
 _LICENSE = ""
 
+
 # TODO: Add link to the official dataset URLs here
 # The HuggingFace Datasets library doesn't host the datasets but only points to the original files.
 # This can be an arbitrary nested dict/list of URLs (see below in `_split_generators` method)
 
 class TydiqaBuilderConfig(datasets.BuilderConfig):
     """BuilderConfig for AnswerableTydiqa"""
-    language:str = "english"
-    monolingual:bool = True
+    language: str = "english"
+    monolingual: bool = True
+    split_to_sentences: bool = True
+
     def __init__(self, **kwargs):
-        language = kwargs.pop("language", "all")
-        monolingual = kwargs.pop("monolingual", True)
         super().__init__(**kwargs)
-        self.language = language
-        self.monolingual = monolingual
+        self.language = kwargs.pop("language", "all")
+        self.monolingual = kwargs.pop("monolingual", True)
+        self.split_to_sentences = kwargs.pop("split_to_sentences", True)
+
+    def language_filter(self, split, language):
+        if language == "all":
+            return True
+
+        if self.monolingual:
+            return self.language == language
+
+        # multilingual
+        if split == "train":
+            return self.language == language
+        return self.language != language
+
+    def urls(self):
+        raise NotImplementedError()
 
 
-VERSION = datasets.Version("2.0.1")
-PREPROCESSED="preprocessed"
-TOKENIZED = "tokenized"
-BPEMB = "bpemb"
-HASHINGTRICK = "hashingtrick"
-HASHINGTRICK_BPEMB = "hashingtrick_bpemb"
+class RawConfig(TydiqaBuilderConfig):
 
+    def __init__(self, **kwargs):
+        super().__init__(name="raw", **kwargs)
 
-
-COMMON_FEATURES = {
-    "id": datasets.Value("string"),
-    "language": datasets.Value("string"),
-    "golds": datasets.features.Sequence(
-                        {
-                            "answer_text": datasets.Value("string"),
-                            "answer_start": datasets.Value("int32"),
-                        }
+    @property
+    def features(self):
+        return datasets.Features(
+            {
+                "seq_id": datasets.Value("string"),
+                "context": datasets.Value("string"),
+                "question": datasets.Value("string"),
+                "golds": datasets.features.Sequence(
+                    {
+                        "text": datasets.Value("string"),
+                        "answer_start": datasets.Value("int32"),
+                    }
                 ),
-}
-FEATURES = {
-    BPEMB: datasets.Features({
-                "iob_label": datasets.features.Sequence(datasets.Value("int32")),
-                "cls_label": datasets.Value("bool"),
-                "context": datasets.features.Sequence(datasets.Value("int32")),
-                "question": datasets.features.Sequence(datasets.Value("int32")),
-                **COMMON_FEATURES,
-    }),
-    TOKENIZED: datasets.Features(
-                {
-                    "iob_label": datasets.features.Sequence(datasets.Value("int32")),
-                    "cls_label": datasets.Value("bool"),
-                    "context": datasets.features.Sequence(datasets.Value("string")),
-                    "question": datasets.features.Sequence(datasets.Value("string")),
-                    **COMMON_FEATURES,
-                }
-            ),
-    PREPROCESSED: datasets.Features(
-                {
-                    "context": datasets.Value("string"),
-                    "question": datasets.Value("string"),
-                    "label": datasets.Value("bool"),
-                    **COMMON_FEATURES,
-                }
-            ),
-    HASHINGTRICK: datasets.Features(
-        {
-            "embeddings": datasets.features.Sequence(datasets.features.Sequence(datasets.Value("float32"))),
-            "label": datasets.Value("bool"),
-            "id": datasets.Value("string"),
-            "language": datasets.Value("string"),
+                "language": datasets.Value("string"),
+            }
+        )
+
+    @property
+    def urls(self):
+        return {}
+
+    def load_base_dataset(self, split):
+        ds = load_dataset("copenlu/answerable_tydiqa", split=split)
+        if self.language == "all":
+            languages = {"english", "finnish", "japanese"}
+        else:
+            languages = {self.language}
+        tokenizers = {
+            "english": "en_core_web_sm",
+            "finnish": "fi_core_news_sm",
+            "japanese": "ja_core_news_sm",
         }
-    ),
-    HASHINGTRICK_BPEMB: datasets.Features(
-        {
-            "embeddings": datasets.features.Sequence(datasets.features.Sequence(datasets.Value("float32"))),
-            "context": datasets.features.Sequence(datasets.Value("int32")),
-            "question": datasets.features.Sequence(datasets.Value("int32")),
-            "label": datasets.Value("bool"),
-            "id": datasets.Value("string"),
-            "language": datasets.Value("string"),
-        }
-    ),
-    # TRANSFORMERS: datasets.Features(
-    #     {
-    #         "input_ids": datasets.features.Sequence(datasets.Value("int32")),
-    #         "attention_mask": datasets.features.Sequence(datasets.Value("int32")),
-    #         "iob_label": datasets.features.Sequence(datasets.Value("int32")),
-    #         "cls_label": datasets.Value("bool"),
-    #         "id": datasets.Value("string"),
-    #     }
-    # )
-}
+        tokenizers = {lang: spacy.load(model) for lang, model in tokenizers.items() if lang in languages}
+
+        ds = (ds
+              .filter(languages.__contains__, input_columns=["language"], num_proc=cpu_count())
+              .rename_columns({"question_text": "question", "document_plaintext": "context"}, num_proc=cpu_count())
+              .remove_columns(["document_url", "document_title"], num_proc=cpu_count())
+              .map(lambda example: {"seq_id": xxh128_hexdigest(example["context"] + example["question"])}, num_proc=cpu_count())
+        )
+        if self.split_to_sentences:
+            ds = ds.map(self.separate_sentences, batched=True, batch_size=1, fn_kwargs={"tokenizers": tokenizers})
+        return ds
+
+    @staticmethod
+    def separate_sentences(example, tokenizers):
+        question = example["question"][0]
+        language = example["language"][0]
+        annotations = example["annotations"][0]
+        context = example["context"][0]
+        seq_id = example["seq_id"][0]
+
+        tokenizer = tokenizers[language]
+
+        answers = [
+            (sent, answer_start + sent.start_char, answer_start + sent.end_char)
+            for answer_text, answer_start in zip(annotations["answer_text"], annotations["answer_start"])
+            for sent in tokenizer(answer_text).sents
+        ]
+        out = defaultdict(list)
+        for sentence in tokenizer(context).sents:
+            out["language"].append(language)
+            out["context"].append(sentence.text)
+            out["seq_id"].append(seq_id)
+            out["question"].append(question)
+
+            sentence_start = sentence.start_char
+            sentence_end = sentence.end_char
+
+            out["golds"].append(defaultdict(list))
+
+            for (answer_text, answer_start, answer_end) in answers:
+                if sentence_start <= answer_start < sentence_end:
+                    termination = min(answer_end, sentence_end) - sentence_start
+                    beginning = answer_start - sentence_start
+                    out["golds"][-1]["answer_text"].append(sentence.text[beginning:termination])
+                    out["golds"][-1]["answer_start"].append(beginning)
+            if not out["golds"][-1]:
+                out["golds"][-1]["answer_text"].append('')
+                out["golds"][-1]["answer_start"].append(-1)
+
+        return out
+
+    @staticmethod
+    def extract(example):
+        return example
 
 
 class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
     """TODO: Short description of my dataset."""
-
 
     # This is an example of a dataset with multiple configurations.
     # If you don't want/need to define several sub-sets in your dataset,
@@ -154,23 +193,21 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
     # data = datasets.load_dataset('my_dataset', 'second_domain')
     BUILDER_CONFIGS = [
         # TydiqaBuilderConfig(name="raw", version=VERSION),
-        TydiqaBuilderConfig(name=PREPROCESSED, version=VERSION),
-        TydiqaBuilderConfig(name=TOKENIZED, version=VERSION),
-        TydiqaBuilderConfig(name=BPEMB, version=VERSION),
-        TydiqaBuilderConfig(name=HASHINGTRICK, version=VERSION),
-        TydiqaBuilderConfig(name=HASHINGTRICK_BPEMB, version=VERSION),
+        # TydiqaBuilderConfig(name=PREPROCESSED, version=VERSION),
+        # TydiqaBuilderConfig(name=TOKENIZED, version=VERSION),
+        # TydiqaBuilderConfig(name=BPEMB, version=VERSION),
+        # TydiqaBuilderConfig(name=HASHINGTRICK, version=VERSION),
+        # TydiqaBuilderConfig(name=HASHINGTRICK_BPEMB, version=VERSION),
+        RawConfig(),
     ]
 
-    DEFAULT_CONFIG_NAME = PREPROCESSED # It's not mandatory to have a default configuration. Just use one if it make sense.
-
     def _info(self):
-        features = FEATURES[self.config.name]
-        
         return datasets.DatasetInfo(
             # This is the description that will appear on the datasets page.
             description=_DESCRIPTION,
             # This defines the different columns of the dataset and their types
-            features=features, # Here we define them above because they are different between the two configurations
+            features=self.config.features,
+            # Here we define them above because they are different between the two configurations
             # If there's a common (input, target) tuple from the features, uncomment supervised_keys line below and
             # specify them. They'll be used if as_supervised=True in builder.as_dataset.
             # supervised_keys=("sentence", "label"),
@@ -183,46 +220,19 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         )
 
     def _split_generators(self, dl_manager):
-        # TODO: This method is tasked with downloading/extracting the data and defining the splits depending on the configuration
-        # If several configurations are possible (listed in BUILDER_CONFIGS), the configuration selected by the user is in self.config.name
-
-        # dl_manager is a datasets.download.DownloadManager that can be used to download and extract URLS
-        # It can accept any type or nested list/dict and will give back the same structure with the url replaced with path to local files.
-        # By default the archives will be extracted and a path to a cached folder where they are extracted is returned instead of the archive
-        name = {
-            PREPROCESSED: PREPROCESSED,
-            TOKENIZED: TOKENIZED,
-            BPEMB: BPEMB,
-            HASHINGTRICK: HASHINGTRICK,
-            HASHINGTRICK_BPEMB: HASHINGTRICK_BPEMB,
-        }[self.config.name]
-        url = "https://raw.githubusercontent.com/PartiallyTyped/answerable_tydiqa/data/{split}/{name}.pq"
-        urls = {
-            "train": url.format(split="train", name=name),
-            "validation": url.format(split="validation", name=name),
-        }
-        print(urls)
-        data_dir = dl_manager.download_and_extract(urls)
-     
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
                 # These kwargs will be passed to _generate_examples
                 gen_kwargs={
-                    "filepath": data_dir["train"],
                     "split": "train",
-                    "language": self.config.language,
-                    "monolingual": self.config.monolingual,
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
                 # These kwargs will be passed to _generate_examples
                 gen_kwargs={
-                    "filepath": data_dir["validation"],
                     "split": "validation",
-                    "language": self.config.language,
-                    "monolingual": self.config.monolingual,
                 },
             ),
         ]
@@ -232,31 +242,9 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         # TODO: This method handles input defined in _split_generators to yield (key, example) tuples from the dataset.
         # The `key` is for legacy reasons (tfds) and is not important in itself, but must be unique for each example.
 
-        if language == "all":
-            check_language = lambda x: True
-        elif monolingual or split=="train":
-            check_language = language.__eq__
-        elif not monolingual and split=="validation":
-            s = {"finnish", "english", "japanese"}
-            s.remove(language)
-            check_language = s.__contains__
-        # if the extension is parquet
-
-        
-        ds = datasets.Dataset(pq.read_table(filepath, memory_map=True))
-        for i, data in enumerate(ds):
-            if not check_language(data["language"]):
-                continue
-            if self.config.name == PREPROCESSED:
-                yield i, extract_preprocessed(data)
-            elif self.config.name in (TOKENIZED, BPEMB):
-                yield i, extract_tokenized(data)
-            elif self.config.name == HASHINGTRICK:
-                yield i, extract_hashingtrick(data)
-            elif self.config.name == HASHINGTRICK_BPEMB:
-                yield i, extract_hashingtrick_bpemb(data)
-            else:
-                raise ValueError("Unknown config name")
+        dataset = self.config.load_dataset()
+        for id_, row in dataset.iterrows():
+            yield id_, self.config.extract(row)
 
 
 def extract_hashingtrick(data):
@@ -266,6 +254,7 @@ def extract_hashingtrick(data):
         "label": data["label"],
         "embeddings": data["embeddings"],
     }
+
 
 def extract_hashingtrick_bpemb(data):
     return {
@@ -277,15 +266,17 @@ def extract_hashingtrick_bpemb(data):
         "question": data["question"],
     }
 
+
 def extract_preprocessed(data):
     return {
-            "id": data["id"],
-            "context": data["context"],
-            "question": data["question"],
-            "golds": data["golds"],
-            "language": data["language"],
-            "label": any(s!=-1 for s in data["golds"]["answer_start"]),
-        }
+        "id": data["id"],
+        "context": data["context"],
+        "question": data["question"],
+        "golds": data["golds"],
+        "language": data["language"],
+        "label": any(s != -1 for s in data["golds"]["answer_start"]),
+    }
+
 
 def extract_tokenized(data):
     return {
