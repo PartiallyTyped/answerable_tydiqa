@@ -130,7 +130,7 @@ class RawConfig(TydiqaBuilderConfig):
               .map(lambda example: {"seq_id": xxh128_hexdigest(example["context"] + example["question"])}, num_proc=cpu_count())
         )
         if self.split_to_sentences:
-            ds = ds.map(self.separate_sentences, batched=True, batch_size=1, fn_kwargs={"tokenizers": tokenizers})
+            ds = ds.map(self.separate_sentences, batched=True, batch_size=1, fn_kwargs={"tokenizers": tokenizers}, remove_columns=["annotations"])
         return ds
 
     @staticmethod
