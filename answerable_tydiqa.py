@@ -242,7 +242,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         # TODO: This method handles input defined in _split_generators to yield (key, example) tuples from the dataset.
         # The `key` is for legacy reasons (tfds) and is not important in itself, but must be unique for each example.
 
-        dataset = self.config.load_dataset()
+        dataset = self.config.load_dataset(split)
         for id_, row in dataset.iterrows():
             yield id_, self.config.extract(row)
 
