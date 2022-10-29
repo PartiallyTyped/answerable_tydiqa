@@ -238,7 +238,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         ]
 
     # method parameters are unpacked from `gen_kwargs` as given in `_split_generators`
-    def _generate_examples(self, filepath, split, language, monolingual):
+    def _generate_examples(self, split):
         # TODO: This method handles input defined in _split_generators to yield (key, example) tuples from the dataset.
         # The `key` is for legacy reasons (tfds) and is not important in itself, but must be unique for each example.
 
