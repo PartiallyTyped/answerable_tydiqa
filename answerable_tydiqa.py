@@ -112,16 +112,7 @@ class RawConfig(TydiqaBuilderConfig):
 
     def load_dataset(self, split):
         ds = load_dataset("copenlu/answerable_tydiqa", split=split)
-        if self.language == "all":
-            languages = {"english", "finnish", "japanese"}
-        else:
-            languages = {self.language}
-        tokenizers = {
-            "english": "en_core_web_sm",
-            "finnish": "fi_core_news_sm",
-            "japanese": "ja_core_news_sm",
-        }
-        tokenizers = {lang: spacy.load(model) for lang, model in tokenizers.items() if lang in languages}
+
 
         ds = (ds
               .filter({"english", "finnish", "japanese"}.__contains__, input_columns=["language"], num_proc=cpu_count())
@@ -130,21 +121,33 @@ class RawConfig(TydiqaBuilderConfig):
               .map(lambda example: {"seq_id": xxh128_hexdigest(example["context"] + example["question"])}, num_proc=cpu_count())
         )
         if self.split_to_sentences:
-            ds = ds.map(self.separate_sentences, batched=True, batch_size=1, fn_kwargs={"tokenizers": tokenizers}, remove_columns=["annotations"])
+            ds = ds.map(self.separate_sentences, batched=True, batch_size=1, remove_columns=["annotations"])
         else:
             ds = ds.rename_columns({"annotations": "golds"})
+
+        if self.language == "all":
+            languages = {"english", "finnish", "japanese"}
+        else:
+            languages = {self.language}
+
         ds = ds.filter(languages.__contains__, input_columns=["language"], num_proc=cpu_count())
         return ds
 
     @staticmethod
-    def separate_sentences(example, tokenizers):
+    def separate_sentences(example):
         question = example["question"][0]
         language = example["language"][0]
         annotations = example["annotations"][0]
         context = example["context"][0]
         seq_id = example["seq_id"][0]
 
-        tokenizer = tokenizers[language]
+        tokenizers = {
+            "english": "en_core_web_sm",
+            "finnish": "fi_core_news_sm",
+            "japanese": "ja_core_news_sm",
+        }
+
+        tokenizer = spacy.load(tokenizers[language])
 
         answers = [
             (sent, answer_start + sent.start_char, answer_start + sent.end_char)
