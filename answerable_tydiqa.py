@@ -98,7 +98,7 @@ class RawConfig(TydiqaBuilderConfig):
                 "question": datasets.Value("string"),
                 "golds": datasets.features.Sequence(
                     {
-                        "text": datasets.Value("string"),
+                        "answer_text": datasets.Value("string"),
                         "answer_start": datasets.Value("int32"),
                     }
                 ),
