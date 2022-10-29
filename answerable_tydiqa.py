@@ -243,7 +243,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         # The `key` is for legacy reasons (tfds) and is not important in itself, but must be unique for each example.
 
         dataset = self.config.load_dataset(split)
-        for i, row in enumerate(dataset.iterrows()):
+        for i, row in enumerate(dataset):
             yield i, self.config.extract(row)
 
 
