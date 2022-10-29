@@ -56,6 +56,16 @@ _LICENSE = ""
 # The HuggingFace Datasets library doesn't host the datasets but only points to the original files.
 # This can be an arbitrary nested dict/list of URLs (see below in `_split_generators` method)
 
+_tokenizer_cache = {}
+def load_tokenizer(language):
+    tokenizers = {
+        "english": "en_core_web_sm",
+        "finnish": "fi_core_news_sm",
+        "japanese": "ja_core_news_sm",
+    }
+    return _tokenizer_cache.setdefault(language, spacy.load(tokenizers[language]))
+
+
 class TydiqaBuilderConfig(datasets.BuilderConfig):
     """BuilderConfig for AnswerableTydiqa"""
     language: str = "english"
@@ -141,13 +151,7 @@ class RawConfig(TydiqaBuilderConfig):
         context = example["context"][0]
         seq_id = example["seq_id"][0]
 
-        tokenizers = {
-            "english": "en_core_web_sm",
-            "finnish": "fi_core_news_sm",
-            "japanese": "ja_core_news_sm",
-        }
-
-        tokenizer = spacy.load(tokenizers[language])
+        tokenizer = load_tokenizer(language)
 
         answers = [
             (sent, answer_start + sent.start_char, answer_start + sent.end_char)
