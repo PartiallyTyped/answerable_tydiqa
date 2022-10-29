@@ -125,8 +125,8 @@ class RawConfig(TydiqaBuilderConfig):
 
         ds = (ds
               .filter(languages.__contains__, input_columns=["language"], num_proc=cpu_count())
-              .rename_columns({"question_text": "question", "document_plaintext": "context"}, num_proc=cpu_count())
-              .remove_columns(["document_url", "document_title"], num_proc=cpu_count())
+              .rename_columns({"question_text": "question", "document_plaintext": "context"})
+              .remove_columns(["document_url", "document_title"])
               .map(lambda example: {"seq_id": xxh128_hexdigest(example["context"] + example["question"])}, num_proc=cpu_count())
         )
         if self.split_to_sentences:
