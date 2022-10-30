@@ -28,6 +28,30 @@ from datasets import load_dataset
 from xxhash import xxh128_hexdigest
 from multiprocessing import cpu_count
 
+from toolz import curry
+import re
+from gensim.parsing.preprocessing import strip_multiple_whitespaces, strip_tags, strip_punctuation, strip_non_alphanum
+from toolz import compose
+from itertools import compress
+
+
+strip_references = curry(re.sub)(r"\[\d+\]", "")
+strip_quotes = curry(re.sub)(r"['\"]", "")
+strip_double_quotes = curry(re.sub)(r"['\"]{2}", "")
+strip_ellipsis = curry(re.sub)(r"\.{3}", "")
+punc = "！？｡。＂＃＄％＆＇（）＊＋，－／：；＜＝＞＠［＼］＾＿｀｛｜｝～｟｠｢｣､、〃》「」『』【】〔〕〖〗〘〙〚〛〜〝〞〟〰〾〿–—‘’‛“”„‟…‧﹏.()-"
+remove_punc = curry(re.sub)(f"[{punc}]", "")
+
+preprocess_string = compose(
+    strip_multiple_whitespaces,
+    strip_tags,
+    strip_punctuation,
+    strip_references,
+    strip_double_quotes,
+    strip_ellipsis,
+    remove_punc,
+)
+
 # TODO: Add BibTeX citation
 # Find for instance the citation on arxiv or on the dataset repo/website
 _CITATION = """\
@@ -63,10 +87,10 @@ class TydiqaBuilderConfig(datasets.BuilderConfig):
     split_to_sentences: bool = True
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
         self.language = kwargs.pop("language", "all")
         self.monolingual = kwargs.pop("monolingual", True)
         self.split_to_sentences = kwargs.pop("split_to_sentences", True)
+        super().__init__(**kwargs)
 
     def language_filter(self, split, language):
         if language == "all":
@@ -181,6 +205,120 @@ class RawConfig(TydiqaBuilderConfig):
     def extract(example):
         return example
 
+class TokenizedConfig(TydiqaBuilderConfig):
+    preprocess: bool = False
+    def __init__(self, preprocess=False, **kwargs):
+        super().__init__(name="tokenized", **kwargs)
+        self.preprocess = preprocess
+    
+    @property
+    def features(self):
+
+        base = {
+                "seq_id": datasets.Value("string"),
+                "context": datasets.features.Sequence(datasets.Value("string")),
+                "question": datasets.features.Sequence(datasets.Value("string")),
+                "golds": datasets.features.Sequence(
+                    {
+                        "answer_text": datasets.features.Sequence(datasets.Value("string")),
+                        "answer_start": datasets.Value("int32"),
+                    }
+                ),
+                "language": datasets.Value("string"),
+            }
+        task = getattr(self, "task", None)
+        if task == "qa":
+            base["label"] = datasets.features.Sequence(datasets.Value("int32"))
+        if task == "cls":
+            base["label"] = datasets.Value("int32")
+
+        return datasets.Features(base)
+
+    @property
+    def urls(self):
+        return {}
+    
+    def load_dataset(self, split):
+        ds = load_dataset("PartiallyTyped/answerable_tydiqa", split=split, language=self.language, monolingual=self.monolingual, split_to_sentences=self.split_to_sentences)
+       # first tokenize question, context using spacy
+        # then preprocess using gensim
+        # then remove empty tokens
+        # use answer_start and len(answer_text) to find the span of tokens in the context
+
+        tokenizers = {
+            "english": "en_core_web_sm",
+            "finnish": "fi_core_news_sm",
+            "japanese": "ja_core_news_sm",
+        }
+        tokenizers = {lang: spacy.load(model) for lang, model in tokenizers.items()}
+        ds = ds.map(self.tokenize, fn_kwargs={"tokenizers": tokenizers}, num_proc=cpu_count())
+        if self.preprocess:
+            ds = ds.map(self.preprocess, num_proc=cpu_count())
+        ds = ds.map(self.remove_empty, num_proc=cpu_count())
+
+    def tokenize(self, example, tokenizers):
+        context = example["context"]
+        question = example["question"]
+        language = example["language"]
+        seq_id = example["seq_id"]
+        tokenizer = tokenizers[language]
+        context, token_start, token_end = zip(*[(token.text, token.idx, token.idx + len(token.text)) for token in tokenizer(context)])
+        question = [token.text for token in tokenizer(question)]
+        labels = [0] * len(context)
+
+        for gold in example["golds"]:
+            answer_text = gold["answer_text"]
+            answer_start = gold["answer_start"]
+            answer_end = answer_start + len(answer_text)
+            for i,(token_start, token_end) in enumerate(zip(token_start, token_end)):
+                if answer_start<=token_start<answer_end:
+                   labels[i] = 1
+
+        return {
+            "seq_id": seq_id,
+            "context": context,
+            "question": question,
+            "golds": example["golds"],
+            "language": language,
+            "label": labels,
+        }
+
+    def preprocess(self, example):
+        context = example["context"]
+        question = example["question"]
+        language = example["language"]
+        seq_id = example["seq_id"]
+        labels = example["label"]
+
+        context = preprocess_string(context, language)
+        question = preprocess_string(question, language)
+
+        return {
+            "seq_id": seq_id,
+            "context": context,
+            "question": question,
+            "golds": example["golds"],
+            "language": language,
+            "label": labels,
+        }
+    
+    def remove_empty(self, example):
+        context = example["context"]
+        question = example["question"]
+        labels = example["label"]
+        selectors = list(map(bool, context))
+        context = list(compress(context, selectors))
+        labels = list(compress(labels, selectors))
+
+        return {
+            "context": context,
+            "question": question,
+            "golds": example["golds"],
+            "language": example["language"],
+            "label": labels,
+            "seq_id": example["seq_id"],
+        }
+
 class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
     """TODO: Short description of my dataset."""
 
@@ -203,6 +341,7 @@ class AnswerableTydiqa(datasets.GeneratorBasedBuilder):
         # TydiqaBuilderConfig(name=HASHINGTRICK, version=VERSION),
         # TydiqaBuilderConfig(name=HASHINGTRICK_BPEMB, version=VERSION),
         RawConfig(),
+        TokenizedConfig(),
     ]
 
     def _info(self):
